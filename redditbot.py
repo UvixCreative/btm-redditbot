@@ -1,11 +1,20 @@
-#!/usr/env python3
+#!/usr/bin/env python3
 
 import praw
 import feedparser
 import time
 import pickle
 from bs4 import BeautifulSoup
-from bs4.element import Tag
+from bs4.element import Tag, NavigableString
+import logging
+
+subreddit = 'uvixsandbox'
+
+logging.basicConfig(format='[%(asctime)s]:%(name)s:%(lineno)s:%(message)s', level=logging.DEBUG, handlers=[
+    logging.FileHandler("redditbot.log"),
+    logging.StreamHandler()
+])
+
 
 # NOTE: For the sake of this script, "latest" means the latest entry from a particular platform. "Last" referrs to the
 # last post that the script itself has parsed and uploaded to reddit.
@@ -14,11 +23,8 @@ def htmltomd(element, ret='', indent=''):
     if type(element) != Tag:
         return ret
     
-    print(indent + element.name)
-    
     if element.name == 'br':
         ret += ' \n'
-        #return ret
         
     # Prefixes
     if element.name == 'h1':
@@ -42,14 +48,11 @@ def htmltomd(element, ret='', indent=''):
 
     # Anchors (links)
     if element.name == 'a':
-        ret+='[{}]({})'.format(element.string, element['href'])
+        ret+='['
 
     # Convert images to links
     if element.name == 'img':
         ret+='\n[[Image: {}]]({})\n'.format(element['alt'], element['src'])
-
-    if element.name == 'li':
-        print(element.string)
         
     childCount = 0
     if element.name == 'ul' or element.name == 'ol':
@@ -70,15 +73,13 @@ def htmltomd(element, ret='', indent=''):
 
     else:
         for child in element.children:
-            if type(child) == Tag and child.name != 'br':
+            if type(child) == NavigableString:
+                ret += str(child).strip()
+            elif type(child) == Tag and child.name != 'br':
                 childCount += 1
                 ret = htmltomd(child, ret, indent+'\t')
                 # Don't += ret because you're already passing ret, and it will return ret +=
                 # whatever it has to offer.
-
-        if childCount == 0:
-            if element.name in ['p', 'li', 'i', 'em', 'b', 'strong']:
-                ret += element.get_text().strip()
                 
     # Second half of pre/suffix combinations
     if element.name == 'sup':
@@ -89,13 +90,15 @@ def htmltomd(element, ret='', indent=''):
         ret+='*'
     elif element.name == 'p':
         ret+=' \n'
+    elif element.name == 'a':
+        ret+=']({})'.format(element['href'])
 
-    #print("ret at depth {}".format(len(indent)))
-    #print(ret)
     return ret
         
 
 def main():
+    logger = logging.getLogger('redditbot')
+
     # -- Sign in
     reddit = praw.Reddit(
         user_agent="blackTeaBot",
@@ -116,28 +119,38 @@ def main():
         if entry['published_parsed'] > lastPosts['newsFeed']:
             lastPosts['newsFeed'] = entry['published_parsed'] # Put this here because even if it's NOT text, we don't need to evaluate it next time
             if entry['content'][0]['type'] == "text/html":
-                output = ''
+                # Get original link
+                link = ''
+                for item in entry['links']:
+                    if item['rel'] == 'alternate':
+                        link = item['href']
+
+                # Original publish date
+                posted = entry['published']
+
+                # Title
+                title = "[BLOG] " + entry['title']
+                
+                body = ''
                 htmlContent = BeautifulSoup(entry['content'][0]['value'], 'html.parser')
+                
 
                 for element in htmlContent:
-                    output += htmltomd(element)
+                    body += htmltomd(element)
 
-                #newPost = reddit.subreddit('uvixsandbox').submit(title=entry['title'],selftext=output)
+                body += "\n\n------- \nOriginally published {} at {}".format(posted, link)
+                #newPost = reddit.subreddit(subreddit).submit(title=title,selftext=body)
                 #print(newPost)
-                print('\n\nPRINTING POST FROM {}'.format(entry['published']))
-                print(output)
 
-    print('Last post from the news feed was {}'.format(time.strftime('%Y-%m-%d %H:%M:%S',lastPosts['newsFeed'])))
-    #print(newsFeedLast)
-    #print(newsFeed['entries'][pos]['published'])
-    #print(newsFeed['entries'][pos]['content'][0].keys())
-
-    # -- Make a post, grab the `submission` object, reply to it. Also grab the ID of the reply
-    title="My Third Bot Post"
-    body="Does the subreddit.submit() method return a whole submission object that I can reply to?"
-    #newPost = reddit.subreddit('pythonforengineers').submit(title=title,selftext=body,flair_id=None,flair_text=None)
-    #newReply = newPost.reply("If you can see this, yes")
-    #print(newPost)
+    # -- Grab feed from BTM YouTube
+    ytFeed = feedparser.parse('https://www.youtube.com/feeds/videos.xml?channel_id=UC9GqrulJF2X4NlJFhcCXmUA')
+    for entry in ytFeed['entries']:
+        if entry['published_parsed'] > lastPosts['ytFeed']:
+            lastPosts['ytFeed'] = entry['published_parsed']
+            title = entry['title']
+            link = entry['link']
+            #newPost = reddit.subreddit(subreddit).submit(title=title, url=link)
+            #print(newPost)
 
     # -- Find posts from a search
     #for thing in reddit.subreddit("pythonforengineers").search('I love python'):
