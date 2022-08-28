@@ -147,7 +147,7 @@ def main():
     for entry in ytFeed['entries']:
         if entry['published_parsed'] > lastPosts['ytFeed']:
             lastPosts['ytFeed'] = entry['published_parsed']
-            title = entry['title']
+            title = "[YT] " + entry['title']
             link = entry['link']
             #newPost = reddit.subreddit(subreddit).submit(title=title, url=link)
             #print(newPost)
