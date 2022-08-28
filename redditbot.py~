@@ -13,12 +13,12 @@ from bs4.element import Tag
 def htmltomd(element, ret='', indent=''):
     if type(element) != Tag:
         return ret
-    
+
     print(indent + element.name)
     
     if element.name == 'br':
-        ret += ' \n'
-        #return ret
+        #ret += ' \n'
+        return ret
         
     # Prefixes
     if element.name == 'h1':
@@ -47,38 +47,21 @@ def htmltomd(element, ret='', indent=''):
     # Convert images to links
     if element.name == 'img':
         ret+='\n[[Image: {}]]({})\n'.format(element['alt'], element['src'])
-
-    if element.name == 'li':
-        print(element.string)
         
+    if element.name == 'ul' or element.name == 'ol' or element.name == 'li':
+        print('Currently unsupported data type')
+
     childCount = 0
-    if element.name == 'ul' or element.name == 'ol':
-        ret+=' \n'
-        linum = 1
-        for child in element.children:
-            if type(child) == Tag and child.name == 'li':
-                # List bulletin, - if unordered, numeric if ordered
-                if element.name == 'ul':
-                    ret += "- "
-                elif element.name == 'ol':
-                    ret += str(linum) + ". "
-                    
-                ret += htmltomd(child, indent=indent+'\t')
-                ret += " \n"
+    for child in element.children:
+        if type(child) == Tag:
+            childCount += 1
+            ret += htmltomd(child, ret, indent+'\t')
 
-                linum += 1
-
-    else:
-        for child in element.children:
-            if type(child) == Tag and child.name != 'br':
-                childCount += 1
-                ret = htmltomd(child, ret, indent+'\t')
-                # Don't += ret because you're already passing ret, and it will return ret +=
-                # whatever it has to offer.
-
-        if childCount == 0:
-            if element.name in ['p', 'li', 'i', 'em', 'b', 'strong']:
-                ret += element.get_text().strip()
+    if childCount == 0:
+        if element.name in ['p', 'li', 'i', 'em']:
+            ret += element.string
+        elif element.name in ['b', 'strong']:
+            ret += element.string.strip()
                 
     # Second half of pre/suffix combinations
     if element.name == 'sup':
@@ -90,8 +73,6 @@ def htmltomd(element, ret='', indent=''):
     elif element.name == 'p':
         ret+=' \n'
 
-    #print("ret at depth {}".format(len(indent)))
-    #print(ret)
     return ret
         
 
@@ -117,9 +98,10 @@ def main():
             lastPosts['newsFeed'] = entry['published_parsed'] # Put this here because even if it's NOT text, we don't need to evaluate it next time
             if entry['content'][0]['type'] == "text/html":
                 output = ''
-                htmlContent = BeautifulSoup(entry['content'][0]['value'], 'html.parser')
-
-                for element in htmlContent:
+                htmlContent = BeautifulSoup(entry['content'][0]['value'])
+                print(htmlContent)
+                continue
+                for element in htmlContent.body:
                     output += htmltomd(element)
 
                 #newPost = reddit.subreddit('uvixsandbox').submit(title=entry['title'],selftext=output)
