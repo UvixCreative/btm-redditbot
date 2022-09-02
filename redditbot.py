@@ -99,20 +99,29 @@ def htmltomd(element, ret='', indent=''):
 def main():
     logger = logging.getLogger('redditbot')
 
+    logger.debug('Signing into reddit')
+
+    with open('secrets.pickle', 'rb') as file:
+        secrets = pickle.load(file)
+        
     # -- Sign in
     reddit = praw.Reddit(
         user_agent="blackTeaBot",
-        client_id="lQR5uub9wKLQWAOyv5oDXA",
-        client_secret="LnltMKGPfEqf3GyeJZij7IjBlR264g",
-        username="creativityisntreal",
-        password="L1m0ismyc@"
+        **secrets
     )
+    logger.info('Sign-in successful')
 
+    logger.debug('Loading "last posted" file')
     # -- Open "last grabbed" pickle file
     with open('btmBotLastPost.pickle', 'rb') as file:
         lastPosts = pickle.load(file)
+    logger.info('Loaded "last posted" file')
 
     # -- Grab news feed from BTM website
+    logger.debug('Getting BTM news feed')
+
+    newEntries = 0
+    
     newsFeed = feedparser.parse('https://www.blackteamotorbikes.com/en-us/blogs/news.atom')
     newsFeed['entries'].reverse() # Reverse for reverse chronological order
     for entry in newsFeed['entries']:
@@ -138,22 +147,39 @@ def main():
                 for element in htmlContent:
                     body += htmltomd(element)
 
+                # Post the title and translated body, with citation and timestamp
                 body += "\n\n------- \nOriginally published {} at {}".format(posted, link)
-                #newPost = reddit.subreddit(subreddit).submit(title=title,selftext=body)
-                #print(newPost)
+                newPost = reddit.subreddit(subreddit).submit(title=title,selftext=body)
+                newEntries += 1
+                logger.info('Created new post: {}'.format(newPost))
+
+    logger.info('Successfully created {} new entries'.format(newEntries))
 
     # -- Grab feed from BTM YouTube
+    logger.debug('Getting YouTube feed')
+
+    newEntries = 0
+    
     ytFeed = feedparser.parse('https://www.youtube.com/feeds/videos.xml?channel_id=UC9GqrulJF2X4NlJFhcCXmUA')
     for entry in ytFeed['entries']:
         if entry['published_parsed'] > lastPosts['ytFeed']:
             lastPosts['ytFeed'] = entry['published_parsed']
             title = "[YT] " + entry['title']
             link = entry['link']
-            #newPost = reddit.subreddit(subreddit).submit(title=title, url=link)
-            #print(newPost)
 
-    # -- Find posts from a search
-    #for thing in reddit.subreddit("pythonforengineers").search('I love python'):
-    #    print(thing.title + " - " + thing.author.name + " - " + thing.id)
+            # Post just the title and URL
+            newPost = reddit.subreddit(subreddit).submit(title=title, url=link)
+            newEntries += 1
+            logger.info('Created new post: {}'.format(newPost))
 
-main()
+    logger.info('Successfully created {} new entries'.format(newEntries))
+
+    logger.debug('Writing "last posted" file')
+    with open('btmBotLastPost.pickle', 'wb') as file:
+        pickle.dump(lastPosts, file)
+    logger.info('Wrote "last posted" file')
+    
+    logger.info('Quitting')
+
+if __name__ == "__main__":
+    main()
